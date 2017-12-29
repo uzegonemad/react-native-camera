@@ -5,12 +5,14 @@ import {
   NativeAppEventEmitter, // ios
   NativeModules,
   Platform,
-  StyleSheet,
   requireNativeComponent,
   View,
-  ViewPropTypes
+  ViewPropTypes,
+  Dimensions
 } from 'react-native';
+import BarcodeFinder from './barcode-finder';
 
+const {height, width} = Dimensions.get('window');
 const CameraManager = NativeModules.CameraManager || NativeModules.CameraModule;
 const CAMERA_REF = 'camera';
 
@@ -57,6 +59,7 @@ function convertNativeProps(props) {
 
   return newProps;
 }
+
 
 export default class Camera extends Component {
 
@@ -116,7 +119,12 @@ export default class Camera extends Component {
     type: PropTypes.oneOfType([
       PropTypes.string,
       PropTypes.number
-    ])
+    ]),
+    barcodeFinderVisible: PropTypes.bool,
+    barcodeFinderWidth: PropTypes.number,
+    barcodeFinderHeight: PropTypes.number,
+    barcodeFinderStyle: PropTypes.object,
+    barcodeFinderPercentageSize: PropTypes.array,
   };
 
   static defaultProps = {
@@ -134,6 +142,11 @@ export default class Camera extends Component {
     torchMode: CameraManager.TorchMode.off,
     mirrorImage: false,
     barCodeTypes: Object.values(CameraManager.BarCodeType),
+    barcodeFinderVisible: false,
+    barcodeFinderWidth: 200,
+    barcodeFinderHeight: 200,
+    barcodeFinderStyle: {borderColor: "rgba(255,255,255,0.6)", borderWidth: 1},
+    barcodeFinderComponent: <BarcodeFinder />
   };
 
   static checkDeviceAuthorizationStatus = CameraManager.checkDeviceAuthorizationStatus;
@@ -197,13 +210,32 @@ export default class Camera extends Component {
     }
   }
 
-  render() {
-    const style = [styles.base, this.props.style];
-    const nativeProps = convertNativeProps(this.props);
-
-    return <RCTCamera ref={CAMERA_REF} {...nativeProps} />;
+  _child(){
+    var props = {
+      style: this.props.barcodeFinderStyle,
+      width: this.props.barcodeFinderWidth,
+      height: this.props.barcodeFinderHeight
+    }
+    return React.cloneElement(this.props.barcodeFinderComponent, props);
   }
 
+  render() {
+    // Should we show barcode finder, use in child or use default
+    var childs = null;
+    var barcodeFinderPercentageSize = [0,0];
+    if(this.props.barcodeFinderVisible){
+      // we need % size of viewFinder
+      barcodeFinderPercentageSize = [(this.props.barcodeFinderWidth/width),(this.props.barcodeFinderHeight/height)]
+      childs = <View style={{left:0,right:0,bottom:0,top:0,position:'absolute',justifyContent:'center',alignItems:'center'}}><View style={{width:this.props.barcodeFinderWidth,height:this.props.barcodeFinderHeight}}>{this._child()}</View></View>;
+    }
+    const nativeProps = convertNativeProps(Object.assign({},this.props,{barcodeFinderPercentageSize}));
+    return (<View style={{flex:1}}>
+              <View style={{flex:1}}>
+                <RCTCamera ref={CAMERA_REF} {...nativeProps} />
+              </View>
+              {childs}
+            </View>);
+  }
   _onBarCodeRead = (data) => {
     if (this.props.onBarCodeRead) {
       this.props.onBarCodeRead(data)
@@ -234,28 +266,6 @@ export default class Camera extends Component {
     }
 
     return CameraManager.capture(options);
-  }
-
-  startPreview() {
-    if (Platform.OS === 'android') {
-      const props = convertNativeProps(this.props);
-      CameraManager.startPreview({
-        type: props.type
-      });
-    } else {
-      CameraManager.startPreview();
-    }
-  }
-
-  stopPreview() {
-    if (Platform.OS === 'android') {
-      const props = convertNativeProps(this.props);
-      CameraManager.stopPreview({
-        type: props.type
-      });
-    } else {
-      CameraManager.stopPreview();
-    }
   }
 
   stopCapture() {
@@ -292,7 +302,3 @@ const RCTCamera = requireNativeComponent('RCTCamera', Camera, {nativeOnly: {
   accessibilityComponentType: true,
   onLayout: true
 }});
-
-const styles = StyleSheet.create({
-  base: {},
-});
